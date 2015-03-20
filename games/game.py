@@ -22,6 +22,7 @@ import logging
 import time
 
 from PySide.QtSql import QSqlQuery
+import trueskill
 from src.abc.base_game import GameConnectionState, BaseGame
 from src.players import Player
 
@@ -68,6 +69,7 @@ class Game(BaseGame):
         :type minPlayer: int
         :return: Game
         """
+        self._results = {}
         self.db = parent.db
         self.parent = parent
         self._player_options = {}
@@ -144,6 +146,15 @@ class Game(BaseGame):
     def teams(self):
         return dict([(team, [player for player in self.players if player.team == team])
                 for team in set([player.team for player in self.players])])
+
+    def add_result(self, player, result):
+        """
+        As computed by the game. Result is an integer, possibly negative
+        :param player:
+        :param result:
+        :return:
+        """
+        self._results[player] = result
 
     def add_game_connection(self, game_connection):
         """
@@ -402,7 +413,7 @@ class Game(BaseGame):
                     msg = msg + "Lost \n"
                 i += 1
 
-        tsresults = self.computeResults(False)
+        tsresults = self.compute_rating(False)
         if tsresults != 0:
             msg += "\nNew ratings :\n"
 
@@ -420,30 +431,28 @@ class Game(BaseGame):
         final.append(msg)
         return final
 
-
-    def computeResults(self, update=True):
-        self.log.debug("Computing results")
-        if update:
-            self.updateTrueskill()
-
-        results = []
-        for teams in self.finalTeams:
-            curScore = 0
-            for players in teams.getAllPlayers():
-                id = str(players.getId())
-                if id in str(self.gameResult):
-                    resultPlayer = self.gameResult[str(id)]
-                    curScore = curScore + resultPlayer
+    def compute_rating(self, rating='global'):
+        """
+        Compute new ratings
+        :param rating: 'global' or 'ladder'
+        :return: rating groups of the form:
+        >>> p1,p2,p3,p4 = Player()
+        >>> [{p1: p1.rating, p2: p2.rating}, {p3: p3.rating, p4: p4.rating}]
+        """
+        assert self.state == GameState.LIVE
+        ranks = []
+        for team, players in self.teams.items():
+            score = 0
+            for player in players:
+                if player in self._results:
+                    score += self._results[player]
                 else:
-                    return 0
-            results.append(curScore)
-        gameInfo = GameInfo()
-        calculator = FactorGraphTrueSkillCalculator()
-        try:
-            newRatings = calculator.calculateNewRatings(gameInfo, self.finalTeams, results)
-            return newRatings
-        except:
-            return 0
+                    raise GameError("Missing game result for {player}".format(player=player))
+            ranks.append(score)
+        rating_groups = [dict([(player, getattr(player, '{}_rating'.format(rating)))
+                               for player in players])
+                         for team, players in self.teams.items()]
+        return trueskill.rate(rating_groups, ranks)
 
     def addScorePlayer(self, player, score):
         self.gameScore[player] = score
