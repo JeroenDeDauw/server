@@ -63,3 +63,10 @@ def test_game_end_when_no_more_connections(game: Game, game_connection):
     game.on_game_end.assert_any_call()
 
 
+def test_game_teams_represents_active_teams(game: Game, players):
+    game.state = GameState.LIVE
+    players.hosting.team = 1
+    players.joining.team = 2
+    game._players = [players.hosting, players.joining]
+    assert game.teams == {1: [players.hosting],
+                          2: [players.joining]}
