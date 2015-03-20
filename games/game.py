@@ -454,18 +454,12 @@ class Game(BaseGame):
                          for team, players in self.teams.items()]
         return trueskill.rate(rating_groups, ranks)
 
-    def addScorePlayer(self, player, score):
-        self.gameScore[player] = score
-
-
     def addResultPlayer(self, player, faresult, score):
         if player in self.gameFaResult:
             if self.gameFaResult[player] != "victory":
                 # the play got not decicive result yet, so we can apply it.
                 self.gameFaResult[player] = faresult
                 self.gameResult[player] = score
-
-
         else:
             self.gameFaResult[player] = faresult
             self.gameResult[player] = score
